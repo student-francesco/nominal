@@ -5,6 +5,7 @@ use std::ops;
 pub enum Operation {
     Add,
     Mul,
+    Tanh,
 }
 
 pub struct Value {
@@ -25,6 +26,20 @@ impl Value {
             children: Vec::new(),
             #[cfg(debug_assertions)]
             label: None,
+        }
+    }
+
+    pub fn tanh(self) -> Self {
+        let x = self.data;
+        let data = (f32::exp(2.0 * x) - 1.0) / (f32::exp(2.0 * x) + 1.0);
+
+        Self {
+            data,
+            op: Some(Operation::Tanh),
+            grad: Cell::new(0.0),
+            children: vec![self],
+            #[cfg(debug_assertions)]
+            label: Some("tanh".to_string()),
         }
     }
 

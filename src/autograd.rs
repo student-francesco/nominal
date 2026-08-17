@@ -19,6 +19,11 @@ pub fn _backward(node: &Value) {
                     .grad
                     .set(node.grad.get() * node.children[0].data);
             }
+            Operation::Tanh => {
+                node.children[0]
+                    .grad
+                    .set(node.grad.get() * (1.0 - node.data.powi(2))); //(1 - t^2) * grad
+            }
         }
     }
 }
