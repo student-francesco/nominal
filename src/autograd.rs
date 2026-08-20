@@ -1,53 +1,39 @@
-use std::collections::HashSet;
-
+use crate::types::Node;
 use crate::types::Operation;
 use crate::types::Value;
 
-pub fn _backward(node: &Value) {
-    if let Some(op) = &node.op {
-        match op {
-            Operation::Add => {
-                for child in &node.children {
-                    child.grad.set(child.grad.get() + node.grad.get());
-                }
-            }
-            Operation::Mul => {
-                node.children[0]
-                    .grad
-                    .set(node.grad.get() * node.children[1].data);
-                node.children[1]
-                    .grad
-                    .set(node.grad.get() * node.children[0].data);
-            }
-            Operation::Tanh => {
-                node.children[0]
-                    .grad
-                    .set(node.grad.get() * (1.0 - node.data.powi(2))); //(1 - t^2) * grad
+pub fn backward_node(nodes: &mut [Node], i: usize) {
+    let node = nodes[i];
+    match node.op {
+        Operation::Add => {
+            let grad = node.grad;
+            for child in &node.deps {
+                nodes[*child].grad += grad;
             }
         }
+        Operation::Mul => {
+            nodes[node.deps[0]].grad += node.grad * nodes[node.deps[1]].data;
+            nodes[node.deps[1]].grad += node.grad * nodes[node.deps[0]].data;
+        }
+        Operation::Tanh => {
+            nodes[node.deps[0]].grad += node.grad * (1.0 - node.data.powi(2)); //(1 - t^2) * grad
+        }
+        Operation::Pow(exp) => {
+            let data = nodes[node.deps[0]].data;
+            nodes[node.deps[0]].grad += exp * f32::powf(data, exp - 1.0) * node.grad;
+        }
+        Operation::Exp => {
+            nodes[node.deps[0]].grad += node.grad * node.data;
+        }
+        Operation::Leaf => {}
     }
-}
-
-fn _build_topo<'a>(node: &'a Value, visited: &mut HashSet<*const Value>, out: &mut Vec<&'a Value>) {
-    if !visited.insert(node as *const Value) {
-        return;
-    }
-    for child in &node.children {
-        _build_topo(child, visited, out);
-    }
-    out.push(node);
-}
-pub fn build_topo(root: &Value) -> Vec<&Value> {
-    let mut visited = HashSet::new();
-    let mut out: Vec<&Value> = Vec::new();
-    _build_topo(root, &mut visited, &mut out);
-    out
 }
 
 pub fn backward(root: &Value) {
-    root.grad.set(1.0);
-    let map = build_topo(root);
-    for node in map.iter().rev() {
-        _backward(node);
+    let tape = root.tape;
+    let mut nodes = tape.nodes.borrow_mut();
+    nodes[root.idx].grad = 1.0;
+    for i in (0..=root.idx).rev() {
+        backward_node(&mut nodes, i);
     }
 }

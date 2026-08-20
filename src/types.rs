@@ -1,92 +1,157 @@
-use std::cell::Cell;
+use std::cell::RefCell;
 use std::fmt::Display;
 use std::ops;
 
+#[derive(Clone, Copy)]
 pub enum Operation {
     Add,
     Mul,
+    Pow(f32),
     Tanh,
+    Exp,
+    Leaf,
 }
 
-pub struct Value {
+pub struct Tape {
+    pub(crate) nodes: RefCell<Vec<Node>>,
+}
+#[derive(Clone, Copy)]
+pub struct Node {
     pub data: f32,
-    pub op: Option<Operation>,
-    pub grad: Cell<f32>,
-    pub children: Vec<Value>,
+    pub grad: f32,
+    pub op: Operation,
+    pub deps: [usize; 2],
     #[cfg(debug_assertions)]
-    pub label: Option<String>,
+    pub label: Option<&'static str>,
+}
+#[derive(Clone, Copy)]
+pub struct Value<'t> {
+    pub(crate) tape: &'t Tape,
+    pub(crate) idx: usize,
 }
 
-impl Value {
-    pub fn new(data: f32) -> Self {
+impl Tape {
+    pub fn new() -> Self {
         Self {
-            data,
-            op: None,
-            grad: Cell::new(0.0),
-            children: Vec::new(),
-            #[cfg(debug_assertions)]
-            label: None,
+            nodes: RefCell::new(Vec::new()),
         }
+    }
+
+    pub fn value(&self, data: f32) -> Value<'_> {
+        Value::push(self, data, Operation::Leaf, [0, 0])
+    }
+}
+
+impl<'t> Value<'t> {
+    pub fn pow(self, exponent: f32) -> Self {
+        Value::push(
+            self.tape,
+            self.data().powf(exponent),
+            Operation::Pow(exponent),
+            [self.idx, 0],
+        )
+    }
+
+    pub fn exp(self) -> Self {
+        Value::push(self.tape, self.data().exp(), Operation::Exp, [self.idx, 0])
     }
 
     pub fn tanh(self) -> Self {
-        let x = self.data;
-        let data = (f32::exp(2.0 * x) - 1.0) / (f32::exp(2.0 * x) + 1.0);
-
-        Self {
-            data,
-            op: Some(Operation::Tanh),
-            grad: Cell::new(0.0),
-            children: vec![self],
-            #[cfg(debug_assertions)]
-            label: Some("tanh".to_string()),
-        }
+        let data = self.data();
+        let t = (f32::exp(2.0 * data) - 1.0) / (f32::exp(2.0 * data) + 1.0);
+        Value::push(self.tape, t, Operation::Tanh, [self.idx, 0])
     }
 
     #[cfg(debug_assertions)]
-    pub fn with_label(mut self, label: &str) -> Self {
-        self.label = Some(label.to_string());
+    pub fn with_label(self, label: &'static str) -> Self {
+        self.tape.nodes.borrow_mut()[self.idx].label = Some(label);
         self
     }
 }
 
-impl ops::Add for Value {
+impl<'t> Value<'t> {
+    pub fn push(tape: &'t Tape, data: f32, op: Operation, deps: [usize; 2]) -> Self {
+        let mut nodes = tape.nodes.borrow_mut();
+        nodes.push(Node {
+            data,
+            grad: 0.0,
+            op,
+            deps,
+            #[cfg(debug_assertions)]
+            label: None,
+        });
+        Self {
+            tape,
+            idx: nodes.len() - 1,
+        }
+    }
+
+    pub fn data(&self) -> f32 {
+        self.tape.nodes.borrow()[self.idx].data
+    }
+
+    pub fn grad(&self) -> f32 {
+        self.tape.nodes.borrow()[self.idx].grad
+    }
+}
+
+impl<'t> ops::Add for Value<'t> {
     type Output = Self;
 
     fn add(self, other: Self) -> Self {
-        Self {
-            data: self.data + other.data,
-            op: Some(Operation::Add),
-            grad: Cell::new(0.0),
-            children: vec![self, other],
-            #[cfg(debug_assertions)]
-            label: None,
-        }
+        debug_assert!(
+            std::ptr::eq(self.tape, other.tape),
+            "operands from different tapes"
+        );
+        let data = self.data() + other.data();
+        Value::push(self.tape, data, Operation::Add, [self.idx, other.idx])
     }
 }
 
-impl ops::Mul for Value {
+impl<'t> ops::Mul for Value<'t> {
     type Output = Self;
 
     fn mul(self, other: Self) -> Self {
-        Self {
-            data: self.data * other.data,
-            op: Some(Operation::Mul),
-            grad: Cell::new(0.0),
-            children: vec![self, other],
-            #[cfg(debug_assertions)]
-            label: None,
-        }
+        debug_assert!(
+            std::ptr::eq(self.tape, other.tape),
+            "operands from different tapes"
+        );
+        let data = self.data() * other.data();
+        Value::push(self.tape, data, Operation::Mul, [self.idx, other.idx])
     }
 }
 
-impl Display for Value {
+impl<'t> ops::Neg for Value<'t> {
+    type Output = Self;
+
+    fn neg(self) -> Self {
+        self * self.tape.value(-1.0)
+    }
+}
+
+impl<'t> ops::Sub for Value<'t> {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self {
+        self + (-other)
+    }
+}
+
+impl<'t> ops::Div for Value<'t> {
+    type Output = Self;
+
+    fn div(self, other: Self) -> Self {
+        self * other.pow(-1.0)
+    }
+}
+
+impl<'t> Display for Value<'t> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Value(")?;
         #[cfg(debug_assertions)]
-        if let Some(label) = &self.label {
+        if let Some(label) = &self.tape.nodes.borrow()[self.idx].label {
             write!(f, "{label},")?;
         }
-        write!(f, "data={})", self.data)
+        write!(f, "data={})", self.data())
     }
 }
