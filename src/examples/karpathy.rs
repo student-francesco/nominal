@@ -24,9 +24,11 @@ pub fn manual() {
     let e = (tape.value(2.0) * n).exp().with_label("e");
     let o = ((e - tape.value(1.0)) / (e + tape.value(1.0))).with_label("o");
 
-    println!("Value of o: {o}");
+    #[cfg(debug_assertions)]
+    {
+        println!("Value of o: {o}");
+        print_gradients(&tape);
+    }
 
     backward(&o);
-
-    print_gradients(&tape);
 }

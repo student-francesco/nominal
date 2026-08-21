@@ -1,9 +1,4 @@
-pub mod autograd;
-pub mod debug;
-pub mod nn;
-pub mod types;
-
-mod examples;
+use nominal::examples;
 
 fn main() {
     println!("Running examples::karpathy::manual");

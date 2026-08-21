@@ -67,6 +67,11 @@ impl<'t> Value<'t> {
         self.tape.nodes.borrow_mut()[self.idx].label = Some(label);
         self
     }
+
+    #[cfg(not(debug_assertions))]
+    pub fn with_label(self, label: &'static str) -> Self {
+        self
+    }
 }
 
 impl<'t> Value<'t> {

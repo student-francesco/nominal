@@ -1,2 +1,2 @@
 // Copy-exact examples from Karpathy's micrograd course
-pub(crate) mod karpathy;
+pub mod karpathy;
