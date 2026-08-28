@@ -22,7 +22,7 @@ pub fn manual() {
 
     // tanh(n), built out of primitives: (e^2n - 1) / (e^2n + 1)
     let e = (tape.value(2.0) * n).exp().with_label("e");
-    let o = ((e - tape.value(1.0)) / (e + tape.value(1.0))).with_label("o");
+    let o = ((e.clone() - tape.value(1.0)) / (e + tape.value(1.0))).with_label("o");
 
     #[cfg(debug_assertions)]
     {
@@ -30,5 +30,5 @@ pub fn manual() {
         print_gradients(&tape);
     }
 
-    backward(&o);
+    backward(&tape, o.idx);
 }
