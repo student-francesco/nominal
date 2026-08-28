@@ -23,8 +23,6 @@ pub struct Node {
     pub grad: f32,
     pub op: Operation,
     pub deps: [usize; 2],
-    #[cfg(debug_assertions)]
-    pub label: Option<&'static str>,
 }
 #[derive(Clone)]
 pub struct Value {
@@ -71,17 +69,6 @@ impl Value {
         let t = (f32::exp(2.0 * data) - 1.0) / (f32::exp(2.0 * data) + 1.0);
         Value::push(&self.tape, t, Operation::Tanh, [self.idx, 0])
     }
-
-    #[cfg(debug_assertions)]
-    pub fn with_label(self, label: &'static str) -> Self {
-        self.tape.nodes.borrow_mut()[self.idx].label = Some(label);
-        self
-    }
-
-    #[cfg(not(debug_assertions))]
-    pub fn with_label(self, label: &'static str) -> Self {
-        self
-    }
 }
 
 impl Value {
@@ -92,8 +79,6 @@ impl Value {
             grad: 0.0,
             op,
             deps,
-            #[cfg(debug_assertions)]
-            label: None,
         });
         Self {
             tape: tape.clone(),
@@ -174,11 +159,6 @@ impl ops::Div for Value {
 
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Value(")?;
-        #[cfg(debug_assertions)]
-        if let Some(label) = &self.tape.nodes.borrow()[self.idx].label {
-            write!(f, "{label},")?;
-        }
-        write!(f, "data={})", self.data())
+        write!(f, "Value(data={})", self.data())
     }
 }
